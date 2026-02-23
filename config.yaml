@@ -1,0 +1,419 @@
+# PUMS Enrichment Pipeline Configuration
+
+# Data paths
+data_paths:
+  # Raw data inputs
+  pums_household: "data/raw/pums/2023/psam_husa.csv"
+  pums_person: "data/raw/pums/2023/psam_pusa.csv"
+  recs_data: "data/raw/recs/2020/recs2020_public_v7.csv"
+  atus_respondent: "data/raw/atus/2023/atusresp-2023/atusresp_2023.dat"
+  atus_activity: "data/raw/atus/2023/atusact-2023/atusact_2023.dat"
+  weather_data: "data/raw/weather/2023/"
+  
+  # Processed data outputs
+  phase1_output: "data/processed/phase1_pums_buildings.pkl"
+  phase2_output: "data/processed/phase2_pums_recs_buildings.pkl"
+  phase3_output: "data/processed/phase3_pums_recs_atus_buildings.pkl"
+  phase4_output: "data/processed/phase4_final_integrated_buildings.pkl"
+  
+  # Validation reports
+  phase1_validation: "data/validation/phase1_validation_report.html"
+  phase2_validation: "data/validation/phase2_validation_report.html"
+  phase3_validation: "data/validation/phase3_validation_report.html"
+  phase4_validation: "data/validation/phase4_validation_report.html"
+  
+  # Matching parameters storage
+  matching_parameters: "data/matching_parameters/"
+
+# Processing parameters
+processing:
+  # Sample size for development/testing (set to null for full data)
+  default_sample_size: null
+  
+  # Random seed for reproducibility
+  random_seed: 42
+  
+  # Chunk size for reading large files
+  chunk_size: 10000
+  
+  # Number of CPU cores to use (null = all available)
+  n_jobs: null
+  
+  # Memory limit in GB (for monitoring)
+  memory_limit_gb: 8
+  
+  # Data year for calculating building age
+  data_year: 2023
+
+# Phase 1 specific settings
+phase1:
+  # Columns to keep from household data (based on PUMS Household Variables List.csv)
+  household_columns:
+    - RT
+    - SERIALNO
+    - DIVISION
+    - PUMA
+    - REGION
+    - STATE
+    - WGTP
+    - NP
+    - TYPEHUGQ
+    - ACCESSINET
+    - ACR
+    - BATH
+    - BDSP
+    - BLD
+    - BROADBND
+    - COMPOTHX
+    - ELEP
+    - FS
+    - FULP
+    - GASP
+    - HFL
+    - HISPEED
+    - HOTWAT
+    - LAPTOP
+    - REFR
+    - RMSP
+    - SMARTPHONE
+    - STOV
+    - TABLET
+    - TEN
+    - VACS
+    - VEH
+    - YRBLT
+    - GRPIP
+    - HHT
+    - HINCP
+    - KIT
+    - MULTG
+    - NOC
+    - NRC
+    - OCPIP
+    - R18
+    - R60
+    - R65
+    # Include all weight replicates
+    - WGTP1
+    - WGTP2
+    - WGTP3
+    - WGTP4
+    - WGTP5
+    - WGTP6
+    - WGTP7
+    - WGTP8
+    - WGTP9
+    - WGTP10
+    - WGTP11
+    - WGTP12
+    - WGTP13
+    - WGTP14
+    - WGTP15
+    - WGTP16
+    - WGTP17
+    - WGTP18
+    - WGTP19
+    - WGTP20
+    - WGTP21
+    - WGTP22
+    - WGTP23
+    - WGTP24
+    - WGTP25
+    - WGTP26
+    - WGTP27
+    - WGTP28
+    - WGTP29
+    - WGTP30
+    - WGTP31
+    - WGTP32
+    - WGTP33
+    - WGTP34
+    - WGTP35
+    - WGTP36
+    - WGTP37
+    - WGTP38
+    - WGTP39
+    - WGTP40
+    - WGTP41
+    - WGTP42
+    - WGTP43
+    - WGTP44
+    - WGTP45
+    - WGTP46
+    - WGTP47
+    - WGTP48
+    - WGTP49
+    - WGTP50
+    - WGTP51
+    - WGTP52
+    - WGTP53
+    - WGTP54
+    - WGTP55
+    - WGTP56
+    - WGTP57
+    - WGTP58
+    - WGTP59
+    - WGTP60
+    - WGTP61
+    - WGTP62
+    - WGTP63
+    - WGTP64
+    - WGTP65
+    - WGTP66
+    - WGTP67
+    - WGTP68
+    - WGTP69
+    - WGTP70
+    - WGTP71
+    - WGTP72
+    - WGTP73
+    - WGTP74
+    - WGTP75
+    - WGTP76
+    - WGTP77
+    - WGTP78
+    - WGTP79
+    - WGTP80
+    
+  # Columns to keep from person data
+  person_columns:
+    - RT
+    - SERIALNO
+    - DIVISION
+    - SPORDER
+    - PUMA
+    - REGION
+    - STATE
+    - PWGTP
+    - AGEP
+    - COW
+    - JWMNP
+    - JWRIP
+    - JWTRNS
+    - MAR
+    - MIL
+    - MLPA
+    - MLPB
+    - NAICSP
+    - NATIVITY
+    - NOP
+    - OCCP
+    - OIP
+    - PAP
+    - PERNP
+    - PINCP
+    - POBP
+    - POVPIP
+    - POWSP
+    - POWUMA
+    - PRIVCOV
+    - PUBCOV
+    - QTRBIR
+    - RAC1P
+    - RAC2P
+    - RAC3P
+    - RACAIAN
+    - RACASN
+    - RACBLK
+    - RACNH
+    - RACNUM
+    - RACPI
+    - RACSOR
+    - RACWHT
+    - RC
+    - RELSHIPP
+    - SCHG
+    - SCHL
+    - SCH
+    - SEMP
+    - SEX
+    - SOCP
+    - SSIP
+    - SSP
+    - WAGP
+    - WAOB
+    - WKWN
+    - WKWB
+    - WRK
+    - YOEP
+    - ANC
+    - ANC1P
+    - ANC2P
+    - DECADE
+    - DIS
+    - ESP
+    - ESR
+    - FOD1P
+    - FOD2P
+    - HICOV
+    - HISP
+    - INDP
+    - JWAP
+    - JWDP
+    - LANP
+    - MIGPUMA
+    - MIGSP
+    - MSP
+    - OC
+    - PAOC
+    - PUMA
+    - ST
+    - VPS
+    - WAOB
+
+# Phase 2 specific settings
+phase2:
+  # Prior probability that a random PUMS-RECS pair is a match
+  em_prior_match: 0.1
+  
+  # EM algorithm parameters
+  em_max_iterations: 100
+  em_tolerance: 0.0001
+  
+  # Target precision for classification thresholds
+  target_precision: 0.95
+  
+  # Minimum weight to consider a match valid
+  min_match_weight: 0.0
+  
+  # Field weights for matching (relative importance)
+  field_weights:
+    state: 2.0
+    income: 1.5
+    household_size: 1.5
+    building_type: 1.0
+    urban_rural: 0.8
+    building_age: 0.7
+    heating_fuel: 0.6
+  
+  # Blocking configuration
+  blocking:
+    strategies:
+      - fields: ["STATE", "income_quintile"]
+      - fields: ["STATE", "household_size_cat"]
+      - fields: ["building_type_simple", "urban_rural"]
+
+# Matching parameters (Phase 2-3)
+matching:
+  # Blocking strategies to reduce computational complexity
+  blocking_keys: 
+    - ["STATE", "income_quintile"]
+    - ["STATE", "household_size_cat"]
+    - ["PUMA", "building_type"]
+  
+  # String similarity thresholds
+  similarity_thresholds:
+    exact_match: 1.0
+    high_confidence: 0.94
+    partial_match: 0.88
+    review_threshold: 0.66
+    
+  # EM algorithm parameters
+  em_algorithm:
+    max_iterations: 100
+    convergence_threshold: 0.0001
+    initial_m_probability: 0.9
+    initial_u_probability: 0.1
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Date format
+  datefmt: "%Y-%m-%d %H:%M:%S"
+  
+  # Log file settings
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+  
+  # Performance logging
+  log_performance: true
+  log_memory_usage: true
+
+# Phase 4 specific settings
+phase4:
+  # Weather data configuration
+  weather:
+    # Base temperature for degree day calculations (Celsius)
+    base_temp_c: 18.3  # 65°F
+    
+    # Temperature comfort zones (Celsius)
+    comfort_zone_min: 18
+    comfort_zone_max: 24
+    
+    # Solar radiation threshold for "sunny" conditions (W/m2)
+    sunny_threshold: 200
+    
+    # Wind speed thresholds (m/s)
+    calm_wind_threshold: 0.5
+    windy_threshold: 10
+    
+    # Humidity comfort zones (%)
+    humidity_low_threshold: 30
+    humidity_high_threshold: 70
+    
+  # Activity-weather alignment
+  activity_alignment:
+    # Default date for weather alignment
+    default_date: "2023-01-01"
+    
+    # Allow midnight crossing activities
+    handle_midnight_crossing: true
+    
+    # Maximum activity duration to process (hours)
+    max_activity_hours: 24
+    
+  # Energy indicators
+  energy:
+    # Temperature thresholds for HVAC demand (Celsius)
+    heating_threshold: 15
+    cooling_threshold: 25
+    
+    # Extreme temperature thresholds (Celsius)
+    extreme_cold: -10
+    extreme_heat: 35
+    
+  # Caching configuration
+  caching:
+    # Cache interpolated weather data
+    use_cache: true
+    
+    # Cache directory
+    cache_dir: "data/processed/weather_cache"
+    
+    # Cache expiry (days)
+    cache_expiry_days: 30
+
+# Validation settings
+validation:
+  # Minimum acceptable match rate for Phase 2
+  min_match_rate: 0.95
+  
+  # Maximum acceptable missing data percentage
+  max_missing_percentage: 5.0
+  
+  # Generate plots in validation reports
+  generate_plots: true
+  
+  # Validation sample size (for quick checks)
+  validation_sample: 1000
+  
+  # Phase 4 specific validation
+  phase4:
+    # Minimum weather coverage rate (%)
+    min_weather_coverage: 90
+    
+    # Minimum activity alignment rate (%)
+    min_activity_alignment: 85
+    
+    # Temperature range validation (Celsius)
+    valid_temp_min: -40
+    valid_temp_max: 50
+    
+    # Humidity range validation (%)
+    valid_humidity_min: 0
+    valid_humidity_max: 100
