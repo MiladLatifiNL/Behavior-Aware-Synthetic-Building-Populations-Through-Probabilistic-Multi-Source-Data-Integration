@@ -1,428 +1,158 @@
-# Building Energy Data Integration Project - Complete Implementation Guide
+# Pipeline Workflow
 
-## 🎉 PRODUCTION READY - LIVING SYSTEM COMPLETE (2025-08-06)
+## Overview
 
-### System Status: ✅ FULLY OPERATIONAL
-- **100% Test Coverage**: All phases validated and working
-- **100% Real Data**: No synthetic data - PUMS 2023, RECS 2020, ATUS 2023 (8,548 respondents), NSRDB weather
-- **100% Match Rates**: Perfect coverage across all integration points
-- **Performance**: 10.9 buildings/second (can process 1.4M buildings in ~35 hours)
-- **Visualizations**: 30+ plots operational
-
-## Project Overview
-You are building a data pipeline that creates a synthetic population of buildings with realistic occupants, appliances, activities, and weather conditions for energy modeling. This project uses **state-of-the-art probabilistic record linkage methods** based on the Fellegi-Sunter framework to ensure high-quality matching.
-
-## Understanding Your Enhanced Project Structure
-
-### Core Files
-- **`main.py`** - The orchestrator that runs all phases in sequence
-- **`config.yaml`** - Contains all your settings (file paths, parameters, matching thresholds)
-- **`requirements.txt`** - List of Python packages (includes faiss-cpu, recordlinkage, jellyfish)
-
-### Data Folders
-- **`data/raw/`** - Original datasets you download (never modify these)
-- **`data/processed/`** - Output from each phase (your pipeline creates these)
-- **`data/validation/`** - Quality reports for each phase
-- **`data/matching_parameters/`** - **NEW**: Stored Fellegi-Sunter parameters and weights
-
-### Enhanced Source Code Structure
-- **`src/data_loading/`** - Modules that load and clean raw data
-- **`src/processing/`** - Core logic for each of the 4 phases
-- **`src/matching/`** - **ENHANCED**: Advanced probabilistic matching algorithms
-- **`src/validation/`** - **ENHANCED**: Advanced quality assessment with proper metrics
-- **`src/utils/`** - Helper functions including data standardization
+The PUMS Enrichment Pipeline is a 4-phase sequential data integration system. Each phase consumes the prior phase's output, enriches building records with data from an additional source, and writes the result as shards for the next phase. The final output is a unified dataset of buildings with occupants, energy characteristics, activity schedules, and weather conditions.
 
 ---
 
-## PHASE 1: Create Buildings with Occupants ✅ COMPLETE
-**Goal**: Merge household and person data to create occupied buildings
-**Methodology**: Direct merge with data quality validation
-**Status**: ✅ Fully operational - 5.5 households/second processing speed
+## Data Flow
 
-### Files You'll Work On (in this order):
-
-#### 1. `src/utils/config_loader.py`
-**Purpose**: Load settings from config.yaml
-**What to implement**:
-- Function to read YAML configuration file
-- Return configuration as a Python dictionary
-- Handle missing config file errors
-- **NEW**: Load matching parameters and thresholds
-
-#### 2. `src/utils/logging_setup.py`
-**Purpose**: Set up logging for the entire project
-**What to implement**:
-- Configure logging to write to `logs/phase1.log`
-- Set appropriate log levels (INFO, WARNING, ERROR)
-- Format log messages with timestamps
-- **NEW**: Add matching diagnostics logging
-
-#### 3. `src/utils/data_standardization.py` ⭐**NEW FILE**
-**Purpose**: Standardize names, addresses, and other fields for matching
-**What to implement**:
-- `standardize_names()` function:
-  - Convert to consistent case
-  - Remove punctuation and extra spaces
-  - Handle prefixes (Mr., Dr.) and suffixes (Jr., Sr.)
-  - Expand common abbreviations
-- `standardize_addresses()` function:
-  - Standardize street types (St, Street, Ave, Avenue)
-  - Handle apartment/unit designations
-  - Normalize directional indicators (N, North, etc.)
-- `parse_name_components()` function:
-  - Split names into first, middle, last components
-  - Handle compound names and hyphenations
-
-#### 4. `src/data_loading/pums_loader.py`
-**Purpose**: Load and clean PUMS household and person data
-**What to implement**:
-- `load_pums_households()` function:
-  - Read `data/raw/pums_household.csv`
-  - **ENHANCED**: Apply data standardization
-  - Clean column names and data types
-  - Return pandas DataFrame
-- `load_pums_persons()` function:
-  - Read `data/raw/pums_person.csv`
-  - **ENHANCED**: Apply name standardization
-  - Clean and standardize the data
-  - Return pandas DataFrame
-- Basic data validation (check for required columns)
-
-#### 5. `src/utils/feature_engineering.py`
-**Purpose**: Create new features for matching
-**What to implement**:
-- `create_household_features()` function:
-  - Calculate household size
-  - Determine household type (family, single, etc.)
-  - Create income categories
-  - Add geographic features
-  - **NEW**: Create blocking keys for efficient matching
-- `create_person_features()` function:
-  - Age groups
-  - Employment categories
-  - Education levels
-  - **NEW**: Create phonetic codes for names (Soundex, NYSIIS)
-
-#### 6-7. Implementation continues as before...
-
-### Expected Output:
-- **File**: `data/processed/phase1_pums_buildings.pkl` ✅ GENERATED
-- **Structure**: Each row = one building with all its occupants
-- **Key columns**: building_id, household info, person info, **standardized fields**, 288 engineered features
-- **Performance**: Processes 100 buildings in ~18 seconds
+```text
+                     PUMS Households + Persons
+                              |
+                     [ Phase 1: Deterministic Merge ]
+                     (merge on SERIALNO, feature engineering)
+                              |
+                     phase1_shards/ + manifest.json
+                              |
+          RECS 2020 ------> [ Phase 2: Probabilistic RECS Matching ]
+                             (Fellegi-Sunter + EM, multi-level blocking)
+                              |
+                     phase2_shards/ + manifest.json
+                              |
+          ATUS 2023 ------> [ Phase 3: Activity Pattern Assignment ]
+                             (optimized k-NN, household coordination)
+                              |
+                     phase3_shards/ + manifest.json
+                              |
+     NSRDB Weather -------> [ Phase 4: Weather Integration ]
+                             (state-level spatial join, interpolation)
+                              |
+                     phase4_shards/ + manifest.json
+                              |
+                     Final Integrated Buildings
+```
 
 ---
 
-## PHASE 2: Add Building Characteristics (PROBABILISTIC MATCHING) ✅ COMPLETE
-**Goal**: Match each building in data/processed/phase1_pums_buildings.pkl to a RECS template using probabilistic record linkage
-**Methodology**: **Fellegi-Sunter probabilistic framework with EM parameter estimation**
-**Status**: ✅ 100% match rate achieved with enhanced feature engineering
+## Phase Execution
 
-### Files You'll Work On (in this order):
+### Phase 1: PUMS Household-Person Integration
 
-#### 1. `src/matching/string_comparators.py` ⭐**NEW FILE**
-**Purpose**: Advanced string comparison methods for probabilistic matching
-**What to implement**:
-- `jaro_winkler_similarity()` function:
-  - Implement Jaro-Winkler string distance
-  - Particularly good for names
-  - Return similarity score (0-1)
-- `edit_distance_similarity()` function:
-  - Levenshtein distance with normalization
-  - Good for addresses and general strings
-- `soundex_match()` function:
-  - Phonetic matching for names
-  - Handle variations in pronunciation
-- `q_gram_similarity()` function:
-  - N-gram based string comparison
-  - Effective for partial string matches
-- `get_similarity_level()` function:
-  - Categorize similarity into discrete levels
-  - Return levels: [0-0.66], [0.66-0.88], [0.88-0.94], [0.94-1.0]
+- **Input**: Raw PUMS household CSV (`psam_hus*.csv`) and person CSV (`psam_pus*.csv`)
+- **Process**: Deterministic merge on SERIALNO. Feature engineering generates 200+ derived features covering household composition, income, building type, energy profiles, and geographic blocking keys. Empty households are filtered.
+- **Output**: `phase1_shards/` with `manifest.json`; sample pickle `phase1_pums_buildings.pkl`
+- **Key modules**: `pums_loader.py`, `phase1_pums_integration.py`, `feature_engineering.py`
 
-#### 2. `src/matching/blocking.py` ⭐**NEW FILE**
-**Purpose**: Reduce computational complexity using blocking strategies
-**What to implement**:
-- `create_standard_blocks()` function:
-  - Block on first letter of last name + geographic region
-  - Block on income range + household size
-  - Create multiple blocking strategies
-- `soundex_blocking()` function:
-  - Block records using phonetic codes
-  - Handles name variations effectively
-- `evaluate_blocking_coverage()` function:
-  - Estimate how many true matches are captured
-  - Report blocking efficiency statistics
+### Phase 2: RECS Building Characteristics Matching
 
-#### 3. `src/matching/fellegi_sunter.py` ⭐**NEW FILE**
-**Purpose**: Core probabilistic record linkage framework
-**What to implement**:
-- `FellegiSunterMatcher` class:
-  - Initialize with comparison fields
-  - Store m-probabilities and u-probabilities
-  - Calculate likelihood ratios
-- `calculate_agreement_patterns()` method:
-  - Compare records across multiple fields
-  - Use string comparators for partial agreement
-  - Return agreement vectors
-- `compute_match_weights()` method:
-  - Calculate log-likelihood ratios
-  - Apply Fellegi-Sunter formula: log₂(m_i/u_i)
-  - Return match weights for classification
-- `classify_pairs()` method:
-  - Apply upper and lower thresholds
-  - Classify as: Match, Non-match, Possible match
-  - Return classification with confidence scores
+- **Input**: Phase 1 shards + raw RECS data (`recs2020_public_v7.csv`)
+- **Process**:
+  1. Load and standardize RECS data with the same encoding as PUMS
+  2. Generate 100+ comparison features (`enhanced_feature_engineering.py`)
+  3. Apply multi-level blocking to generate candidate pairs (7 levels with fallback)
+  4. Run EM algorithm to estimate Fellegi-Sunter m/u probabilities
+  5. Calculate match weights and assign each PUMS building to a RECS template
+- **Output**: `phase2_shards/` with `manifest.json`; sample pickle `phase2_pums_recs_buildings.pkl`
+- **Parameters saved**: `data/matching_parameters/phase2_recs_weights.json`
+- **Key modules**: `recs_loader.py`, `phase2_recs_matching.py`, `fellegi_sunter.py`, `em_algorithm.py`, `blocking.py`, `enhanced_feature_engineering.py`
 
-#### 4. `src/matching/em_algorithm.py` ⭐**NEW FILE**
-**Purpose**: Unsupervised parameter estimation for Fellegi-Sunter model
-**What to implement**:
-- `EMAlgorithm` class:
-  - Estimate m and u probabilities without training data
-  - Handle conditional independence assumptions
-  - Iterative parameter optimization
-- `initialize_parameters()` method:
-  - Set initial values for m and u probabilities
-  - Use reasonable defaults based on field types
-- `expectation_step()` method:
-  - Calculate expected values of match indicators
-  - Update posterior probabilities
-- `maximization_step()` method:
-  - Re-estimate m and u probabilities
-  - Ensure convergence criteria
-- `fit()` method:
-  - Run complete EM algorithm
-  - Monitor convergence and log progress
-  - Save final parameters
+### Phase 3: ATUS Activity Pattern Assignment
 
-#### 5. `src/data_loading/recs_loader.py`
-**Purpose**: Load and prepare RECS reference data for probabilistic matching
-**What to implement**:
-- `load_recs_data()` function:
-  - Read `data/raw/recs_data.csv`
-  - **ENHANCED**: Apply same data standardization as PUMS
-  - Create template IDs for each RECS record
-- `prepare_recs_features()` function:
-  - Select variables that exist in both PUMS and RECS
-  - **NEW**: Create comparison-ready features
-  - Handle missing values with appropriate codes
-  - Return clean dataset for probabilistic matching
+- **Input**: Phase 2 shards + ATUS 2023 data (10 files: respondent, activity, roster, etc.)
+- **Process**:
+  1. Load and merge ATUS respondent, activity, and roster records (8,548 respondents)
+  2. Generate 50+ alignment features (`enhanced_feature_alignment.py`)
+  3. Match each person to the nearest ATUS respondent using optimized k-NN (`scipy.cdist` on 8 key demographic features)
+  4. Apply household coordination constraints (childcare coverage, meal times, schedule compatibility)
+- **Output**: `phase3_shards/` with `manifest.json`; sample pickle `phase3_pums_recs_atus_buildings.pkl`
+- **Parameters saved**: `data/matching_parameters/phase3_atus_weights.json`
+- **Key modules**: `atus_loader.py`, `phase3_atus_matching_optimized.py`, `enhanced_feature_alignment.py`, `household_coordination.py`
 
-#### 6. `src/processing/phase2_recs_matching.py`
-**Purpose**: Main logic for probabilistic matching to RECS templates
-**What to implement**:
-- `setup_probabilistic_matching()` function:
-  - Initialize Fellegi-Sunter matcher
-  - Configure comparison fields and methods
-  - Set up blocking strategy
-- `estimate_matching_parameters()` function:
-  - **NEW**: Use EM algorithm to estimate parameters
-  - No training data required (unsupervised learning)
-  - Save parameters for reuse and validation
-- `perform_probabilistic_matching()` function:
-  - **ENHANCED**: Use Fellegi-Sunter framework instead of simple similarity
-  - Apply blocking for efficiency
-  - Calculate match weights for all pairs
-  - Classify pairs using learned thresholds
-- `resolve_many_to_one_matches()` function:
-  - Handle cases where multiple buildings match same RECS template
-  - Use assignment optimization with match weights
-  - Ensure proportional template usage
+### Phase 4: Weather Integration
 
-#### 7. `src/validation/match_quality_assessor.py` ⭐**NEW FILE**
-**Purpose**: Advanced validation metrics for probabilistic matching
-**What to implement**:
-- `calculate_precision_recall()` function:
-  - **IMPORTANT**: Don't rely on F-measure alone (papers show it's misleading)
-  - Calculate precision and recall properly
-  - Use equal weights for comparison
-- `plot_match_weight_distribution()` function:
-  - Create histogram of match weights
-  - Identify clear separation between matches/non-matches
-  - Visualize threshold selection
-- `estimate_error_rates()` function:
-  - Estimate false match and false non-match rates
-  - Use probabilistic methods from papers
-  - Report confidence intervals
-
-### Step-by-Step Implementation Process:
-
-#### Step 2.1: Build Probabilistic Matching Infrastructure
-1. **Implement `string_comparators.py`** - foundation for all comparisons
-2. **Implement `blocking.py`** - essential for computational efficiency
-3. **Test string comparators** with sample name/address pairs
-
-#### Step 2.2: Implement Fellegi-Sunter Framework
-1. **Implement `fellegi_sunter.py`** - core probabilistic engine
-2. **Implement `em_algorithm.py`** - parameter estimation
-3. **Test on small subset** - verify parameters converge
-
-#### Step 2.3: Enhanced Data Preparation
-1. **Update `recs_loader.py`** with standardization
-2. **Create comparison-ready datasets**
-3. **Verify data quality** before matching
-
-#### Step 2.4: Probabilistic Matching Process
-1. **Implement `phase2_recs_matching.py`** with new framework
-2. **Run parameter estimation** using EM algorithm
-3. **Perform matching** with learned parameters
-4. **Save parameters** to `data/matching_parameters/`
-
-#### Step 2.5: Advanced Validation
-1. **Implement `match_quality_assessor.py`**
-2. **Generate comprehensive quality reports**
-3. **Validate parameter estimates** and matching results
-
-### Expected Output:
-- **File**: `data/processed/phase2_pums_recs_buildings.pkl` ✅ GENERATED
-- **Parameters**: `data/matching_parameters/phase2_recs_weights.json` ✅ EM CONVERGED
-- **Structure**: Phase 1 buildings + RECS characteristics + match quality scores
-- **Quality**: Scientifically validated matching using probabilistic methods
-- **Performance**: ~20 buildings/second processing speed
+- **Input**: Phase 3 shards + NSRDB weather data (state-level hourly observations)
+- **Process**: State-level spatial join. Hourly weather observations are interpolated to align with minute-by-minute activity schedules. Adds temperature, humidity, solar radiation, wind speed, heating/cooling degree days, and weather condition classifications.
+- **Output**: `phase4_shards/` with `manifest.json`; sample pickle `phase4_final_integrated_buildings.pkl`
+- **Key modules**: `weather_loader.py`, `phase4_weather_integration.py`
 
 ---
 
-## PHASE 3: Add Human Activities (PROBABILISTIC MATCHING) ✅ COMPLETE
-**Goal**: Assign daily activity patterns using probabilistic record linkage
-**Methodology**: **Optimized matching with real ATUS 2023 data (8,548 respondents)**
-**Status**: ✅ 100% coverage with <1 second processing for 100 buildings
+## Streaming Architecture
 
-### Files You'll Work On:
+All phases run in streaming mode by default to maintain a bounded memory footprint regardless of dataset size.
 
-#### 1. `src/data_loading/atus_loader.py`
-**Purpose**: Load and process ATUS activity data for probabilistic matching
-**What to implement**:
-- `load_atus_data()` function:
-  - Read `data/raw/atus_data.csv`
-  - **ENHANCED**: Apply demographic standardization
-  - Clean activity categories
-  - Handle demographic variables
-- `create_activity_templates()` function:
-  - **NEW**: Create representative activity patterns
-  - Group similar demographic profiles
-  - Standardize time formats
-- `prepare_atus_matching_features()` function:
-  - Extract demographic features for Fellegi-Sunter matching
-  - Create household context features
-  - Prepare comparison-ready feature matrix
-
-#### 2. `src/processing/phase3_atus_matching.py`
-**Purpose**: Probabilistic matching of people to activity patterns
-**What to implement**:
-- `setup_activity_matching()` function:
-  - Configure Fellegi-Sunter matcher for person-activity comparison
-  - Define comparison fields (age, employment, household type, etc.)
-  - Set up blocking by demographic groups
-- `estimate_activity_matching_parameters()` function:
-  - **NEW**: Use EM algorithm for person-activity matching
-  - Handle household constraints in parameter estimation
-  - Save parameters for validation
-- `match_persons_to_activities()` function:
-  - **ENHANCED**: Use probabilistic framework
-  - Consider household coordination constraints
-  - Ensure realistic activity combinations within households
-- `coordinate_household_activities()` function:
-  - **NEW**: Implement household-level coordination rules
-  - Ensure families eat together, coordinate schedules
-  - Maintain probabilistic matching quality
-
-### Expected Output:
-- **File**: `data/processed/phase3_pums_recs_atus_buildings.pkl` ✅ GENERATED
-- **Parameters**: `data/matching_parameters/phase3_atus_weights.json` ✅ OPTIMIZED
-- **Structure**: Phase 2 buildings + time-resolved activities + matching quality
-- **Data Source**: Real ATUS 2023 survey respondents (NO synthetic data)
+- Each phase reads the prior phase's shard files (listed in `manifest.json`) rather than loading a single monolithic pickle.
+- Each phase writes its own shard directory (e.g., `phase2_shards/`) with a `manifest.json` containing shard file paths and total building count.
+- Small sample pickle files (e.g., `phase1_pums_buildings.pkl`) are retained alongside shards for quick inspection but are not the canonical full-data output.
+- At full scale, each phase produces several hundred shards. Downstream phases iterate over shards sequentially, processing one batch at a time.
 
 ---
 
-## PHASE 4: Add Weather Context ✅ COMPLETE
-**Goal**: Add local weather conditions based on building locations
-**Methodology**: Spatial-temporal matching with NSRDB weather data
-**Status**: ✅ 100% weather-activity alignment achieved
+## Performance Optimizations
 
-### Expected Output:
-- **File**: `data/processed/phase4_final_integrated_buildings.pkl` 🏆 **COMPLETE LIVING SYSTEM**
-- **Structure**: Complete synthetic population with buildings, persons, activities, and weather
-- **Resolution**: 1-minute activity alignment with interpolated weather data
-- **Usage**: Ready for building energy simulation and analysis
+The following optimizations are enabled by default and can be individually disabled:
 
----
+| Feature | Default | Disable flag |
+| ------- | ------- | ------------ |
+| Parallel processing | Enabled (auto-detected CPU cores) | `--no-parallel` |
+| Memory optimization | Enabled (dtype reduction, GC) | `--no-optimize-memory` |
+| Checkpointing | Enabled (resume on failure) | `--no-checkpoint` |
+| Streaming mode | Enabled (shard-based I/O) | `--no-streaming` |
 
-## VALIDATION STRATEGY (ENHANCED)
+Additional capabilities:
 
-### Advanced Validation Metrics
-
-#### Phase 2 & 3 Validation (Probabilistic Matching)
-- **Match Weight Distributions**: Plot histograms showing clear separation
-- **Parameter Convergence**: Verify EM algorithm converged properly
-- **Error Rate Estimation**: Calculate false match/non-match rates
-- **Precision-Recall Analysis**: Use proper equal weighting (not F-measure)
-- **Threshold Sensitivity**: Test matching performance across different thresholds
-- **Blocking Coverage**: Ensure blocking doesn't miss true matches
-
-#### Quality Metrics to Track:
-1. **Match Quality Scores**: Distribution of likelihood ratios
-2. **Parameter Stability**: Consistency across different data subsets
-3. **Computational Efficiency**: Runtime and memory usage
-4. **Coverage Rates**: Percentage of records successfully matched
-5. **Assignment Balance**: Proportional usage of templates
+- Automatic chunk size and batch size calibration based on available RAM
+- GPU detection and TF32 optimization for PyTorch operations where applicable
+- Memory monitoring with configurable limits (`--memory-limit`)
+- Progress tracking with tqdm for all long-running operations
 
 ---
 
-## IMPLEMENTATION PRIORITY
+## Configuration
 
-### Phase 1: Foundation (Week 1-2)
-1. Data standardization infrastructure
-2. Basic PUMS integration
-3. Feature engineering with blocking keys
+All pipeline parameters are defined in `config.yaml`, organized into sections:
 
-### Phase 2: Probabilistic Matching (Week 3-5)
-1. **String comparators** (essential foundation)
-2. **Fellegi-Sunter framework** (core methodology)
-3. **EM algorithm** (parameter estimation)
-4. **Blocking strategies** (performance)
-5. **Advanced validation** (quality assurance)
+- `data_paths`: Input and output file locations
+- `processing`: Sample size, random seed, chunk size, worker count, memory limits
+- `phase1` through `phase4`: Phase-specific settings (column selections, matching thresholds)
+- `matching`: Fellegi-Sunter parameters, blocking strategies, similarity thresholds, EM settings
+- `validation`: Quality thresholds (minimum match rates, maximum missing percentages)
+- `logging`: Log levels and formats
 
-### Phase 3: Activity Matching (Week 6-7)
-1. Adapt probabilistic framework for activities
-2. Implement household coordination
-3. Validate activity realism
-
-### Phase 4: Integration (Week 8)
-1. Weather integration
-2. Final validation
-3. Documentation and testing
+CLI flags override config values at runtime. See `README.md` for the complete CLI reference.
 
 ---
 
-## SUCCESS CRITERIA ✅ ALL MET
+## Validation
 
-### Technical Excellence:
-- ✅ **Probabilistic matching** with scientifically validated parameters
-- ✅ **Error rates** properly estimated and documented
-- ✅ **Scalability** through effective blocking strategies (10.9 buildings/sec)
-- ✅ **Reproducibility** with saved parameters and configurations
+Each phase can produce an HTML validation report in `data/validation/`, covering:
 
-### Quality Assurance:
-- ✅ **Match weight distributions** show clear separation
-- ✅ **Parameter convergence** achieved in EM algorithm (<50 iterations)
-- ✅ **Validation reports** pass all quality checks (100% pass rate)
-- ✅ **Performance metrics** meet computational requirements
+- Data completeness and missing value rates
+- Internal consistency checks
+- Match quality metrics (weight distributions, field agreement rates, EM convergence)
+- Coverage percentages
 
-### Living System Validation:
-- ✅ **100% Building Coverage**: All buildings have persons, RECS data, activities, weather
-- ✅ **100% Person Coverage**: All persons have demographic data and daily activities
-- ✅ **100% Activity Coverage**: All activities aligned with weather conditions
-- ✅ **Data Integrity**: No missing critical data, all validation rules pass
+Validation can run independently with `python main.py --validate-only` or be skipped with `--skip-validation`. The pipeline can optionally halt on validation failures based on configured thresholds.
 
-## 🎯 ACHIEVEMENT SUMMARY
+---
 
-This project successfully implements a sophisticated 4-phase data integration pipeline that creates a **complete living system** of synthetic populations. The system has been thoroughly tested and validated:
+## Visualization
 
-- **Phase 1**: PUMS household-person integration (✅ 100% complete)
-- **Phase 2**: RECS building characteristics matching (✅ 100% match rate)
-- **Phase 3**: ATUS activity pattern assignment (✅ 8,548 real respondents)
-- **Phase 4**: Weather data integration (✅ 100% coverage)
+The visualization system generates plots and dashboards from the Phase 4 final dataset:
 
-The enhanced approach uses cutting-edge probabilistic record linkage methods that are used in production systems at national statistical agencies. The methodology is scientifically rigorous and has produced high-quality, defensible results ready for energy modeling applications.
+- **Entry point**: `python run_visualizations.py`
+- **Modules**: 8 visualizers in `src/visualize/` covering building characteristics, demographics, activity patterns, weather, energy analysis, household dynamics, and system overviews
+- **Data source**: Reads Phase 4 shards (via manifest) or falls back to the Phase 4 sample pickle
+- **Output**: 30+ plots saved to `results/visualizations/` with HTML dashboards
 
-**Status: PRODUCTION READY** 🚀
+---
+
+## Logging
+
+- Phase-specific log files are written to `logs/` (e.g., `phase1.log`, `phase2.log`)
+- `main.log` captures the overall pipeline execution
+- Log level is configurable via `config.yaml` or `--verbose` for debug-level output
+- Performance metrics (processing time, memory usage, throughput) are logged at each phase
+- Matching diagnostics are written to `logs/matching/` when verbose mode is enabled
