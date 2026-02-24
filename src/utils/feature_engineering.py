@@ -281,16 +281,19 @@ def create_household_features(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df['multigenerational'] == 1, 'household_composition'] = 'multigenerational'
     
     # Heating fuel type category
+    # PUMS HFL codes: 1=Utility gas, 2=Bottled/tank/LP gas, 3=Electricity,
+    # 4=Fuel oil/kerosene, 5=Coal/coke, 6=Wood, 7=Solar, 8=Other fuel, 9=No fuel
     if 'HFL' in df.columns:
         df['heating_fuel'] = df['HFL'].map({
             1: 'gas',
-            2: 'electricity',
-            3: 'fuel_oil',
-            4: 'coal',
-            5: 'wood',
-            6: 'solar',
-            7: 'other',
-            8: 'none'
+            2: 'gas',
+            3: 'electricity',
+            4: 'fuel_oil',
+            5: 'coal',
+            6: 'wood',
+            7: 'solar',
+            8: 'other',
+            9: 'none'
         }).fillna('unknown')
     else:
         df['heating_fuel'] = 'unknown'
