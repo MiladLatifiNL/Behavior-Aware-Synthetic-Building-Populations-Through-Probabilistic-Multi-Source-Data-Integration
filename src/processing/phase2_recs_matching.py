@@ -868,7 +868,14 @@ class Phase2RECSMatcher:
         
         logger.info(f"Matched {matched_buildings['has_recs_match'].sum()} buildings")
         logger.info(f"Unmatched: {self.stats['unmatched_buildings']} buildings")
-        
+
+        # Ensure EV charger features propagate from PUMS through the matched output
+        ev_cols = ['ev_charger_prob', 'has_ev_charger', 'charger_level',
+                   'charger_capacity_kw', 'ev_charger_level2_prob']
+        for col in ev_cols:
+            if col in pums_df.columns and col not in matched_buildings.columns:
+                matched_buildings[col] = pums_df[col]
+
         return matched_buildings
     
     def _validate_and_save(self, matched_buildings: pd.DataFrame, matches: pd.DataFrame):

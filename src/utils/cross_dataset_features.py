@@ -503,14 +503,29 @@ class CrossDatasetFeatureEngineer:
                 (df['hh_size_3cat'].isin(['small', 'large']))
             ).astype(int)
         
-        # Electric vehicle proxy (high income + recent building)
-        if 'income_quintile' in df.columns and 'is_new_building' in df.columns:
+        # Electric vehicle charger derivation (literature-calibrated logistic model)
+        # Apply the full 3-stage model for PUMS datasets
+        if dataset_type == 'pums' and 'ev_charger_prob' not in df.columns:
+            try:
+                from .enhanced_feature_engineering import derive_ev_charger_features
+                df = derive_ev_charger_features(df, dataset_type='pums')
+            except Exception as e:
+                logger.warning(f"EV charger derivation failed, using fallback: {e}")
+
+        # Set ev_likely from calibrated probability if available, otherwise heuristic
+        if 'ev_charger_prob' in df.columns:
+            df['ev_likely'] = (df['ev_charger_prob'] > 0.10).astype(int)
+        elif 'income_quintile' in df.columns and 'is_new_building' in df.columns:
+            # Fallback: simplified heuristic if full model not yet applied
             df['ev_likely'] = (
-                (df['income_quintile'].isin(['Q4', 'Q5'])) & 
-                df['is_new_building']
+                (df['income_quintile'].isin(['Q4', 'Q5', 'q4', 'q5'])) &
+                (df['is_new_building'].astype(bool))
             ).astype(int)
-        
-        self.created_features.update(['high_heating_need', 'high_cooling_need', 'energy_intensity_proxy'])
+
+        self.created_features.update([
+            'high_heating_need', 'high_cooling_need', 'energy_intensity_proxy',
+            'ev_likely', 'ev_charger_prob', 'has_ev_charger', 'charger_level', 'charger_capacity_kw'
+        ])
         
         return df
     
