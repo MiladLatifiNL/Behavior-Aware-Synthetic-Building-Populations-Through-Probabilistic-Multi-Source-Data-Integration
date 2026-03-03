@@ -332,7 +332,10 @@ class OptimizedPhase3Matcher:
                         'PINCP': person.get('PINCP', 0),  # Income
                         'DIS': person.get('DIS', 2),  # Disability status
                         'RAC1P': person.get('RAC1P', 1),  # Race
-                        'HISP': person.get('HISP', 1)  # Hispanic origin
+                        'HISP': person.get('HISP', 1),  # Hispanic origin
+                        # Building structural attributes (household-level, from Phase 2 PUMS-RECS output)
+                        'BLD': str(building.get('BLD', '02')),
+                        'TENURE': int(building.get('TEN', building.get('TENURE', 3))),
                     })
                 
                 persons_list.append(person_record)
@@ -379,7 +382,21 @@ class OptimizedPhase3Matcher:
             features.append(min(person.get('WKHP', 0), 80) / 80.0)  # Work hours
             features.append(np.log1p(max(person.get('PINCP', 0), 0)) / 15.0)  # Income
             features.append(1.0 if person.get('DIS', 2) == 1 else 0.0)  # Disability
-            
+
+            # Building structural attributes: tenure type and building type
+            # Tenure: owner (PUMS TEN=1 or 2) maps to 1.0; renter/other maps to 0.0
+            tenure_raw = int(person.get('TENURE', 3))
+            features.append(1.0 if tenure_raw in [1, 2] else 0.0)
+
+            # Building type: single-family=1.0 down to mobile home/other=0.0
+            bld_raw = str(person.get('BLD', '02')).strip().zfill(2)
+            _bld_map = {
+                '01': 0.0, '02': 1.0, '03': 0.9,
+                '04': 0.6, '05': 0.6, '06': 0.3,
+                '07': 0.3, '08': 0.2, '09': 0.1, '10': 0.0,
+            }
+            features.append(_bld_map.get(bld_raw, 0.5))
+
             # Enhanced features (if available)
             for feat in enhanced_features:
                 if feat in person.index:
@@ -416,7 +433,11 @@ class OptimizedPhase3Matcher:
             features.append(template.get('usual_hours_worked', 0) / 80.0)
             features.append(np.log1p(max(template.get('weekly_earnings', 0) * 52, 0)) / 15.0)
             features.append(0.0)  # Disability not directly available
-            
+
+            # Building structural attributes matching the PUMS person side
+            features.append(float(template.get('tenure_code', 0.5)))
+            features.append(float(template.get('housing_type_code', 0.5)))
+
             # Enhanced features (if available)
             for feat in enhanced_features:
                 if feat in template.index:
@@ -441,7 +462,7 @@ class OptimizedPhase3Matcher:
         template_features = scaler.transform(template_features)
         
         logger.info(f"Created enhanced feature matrices: persons {persons_features.shape}, templates {template_features.shape}")
-        logger.info(f"Using {persons_features.shape[1]} features for matching (8 basic + {len(enhanced_features)} enhanced)")
+        logger.info(f"Using {persons_features.shape[1]} features for matching (8 basic + 2 building structural + {len(enhanced_features)} enhanced)")
         
         return persons_features, template_features
     

@@ -466,7 +466,26 @@ def load_all_atus_data(atus_path: Path = None) -> pd.DataFrame:
     weight_cols = ['case_id', 'TUFINLWGT'] if 'TUFINLWGT' in weights.columns else ['case_id']
     if len(weight_cols) > 1:
         atus_data = atus_data.merge(weights[weight_cols], on='case_id', how='left', suffixes=('', '_wgt'))
-    
+
+    # Add housing tenure (HETENURE) from CPS file if available.
+    # HETENURE is a household-level variable: 1=owned, 2=rented, 3=no payment.
+    # The CPS file has one row per household member; we take one row per case.
+    try:
+        cps = load_atus_cps_data(atus_path)
+        if 'HETENURE' in cps.columns:
+            cps_key = 'TUCASEID' if 'TUCASEID' in cps.columns else 'case_id'
+            if cps_key == 'TUCASEID':
+                cps = cps.rename(columns={'TUCASEID': 'case_id'})
+            tenure_per_case = (
+                cps[['case_id', 'HETENURE']]
+                .dropna(subset=['HETENURE'])
+                .drop_duplicates(subset=['case_id'])
+            )
+            atus_data = atus_data.merge(tenure_per_case, on='case_id', how='left')
+            logger.info(f"Merged HETENURE from CPS data ({tenure_per_case['HETENURE'].value_counts().to_dict()})")
+    except (FileNotFoundError, Exception) as e:
+        logger.warning(f"Could not load CPS tenure data: {e}. tenure_code will default to 0.5.")
+
     # Create standardized features for matching
     atus_data = standardize_atus_features(atus_data)
     
@@ -530,6 +549,19 @@ def standardize_atus_features(df: pd.DataFrame) -> pd.DataFrame:
                                       bins=[-1, 0, 20, 35, 45, 100],
                                       labels=['not_working', 'part_time_low', 'part_time_high', 'full_time', 'overtime'])
     
+    # Tenure type from ATUS HETENURE field (1=owned/being bought, 2=rented, 3=no payment)
+    # HETENURE is present in the respondent file and merged in by load_all_atus_data
+    if 'HETENURE' in df.columns:
+        df['tenure_code'] = df['HETENURE'].apply(
+            lambda x: 1.0 if pd.notna(x) and int(x) == 1 else 0.0
+        )
+    else:
+        df['tenure_code'] = 0.5  # neutral default when variable is unavailable
+
+    # Housing unit type: ATUS does not always report detailed building type at the
+    # level of BLD codes, so we use a neutral default and let tenure carry the signal.
+    df['housing_type_code'] = 0.5
+
     # Create unique template ID
     df['template_id'] = 'atus_' + df['case_id'].astype(str)
     
@@ -566,7 +598,7 @@ def create_activity_templates(atus_data: pd.DataFrame, num_templates: Optional[i
         'sleep_time', 'personal_care', 'eating', 'household_work',
         'caring_household', 'work', 'education', 'shopping',
         'leisure', 'civic', 'travel', 'num_activities',
-        'final_weight'
+        'final_weight', 'tenure_code', 'housing_type_code'
     ]
     
     # Keep only available features
