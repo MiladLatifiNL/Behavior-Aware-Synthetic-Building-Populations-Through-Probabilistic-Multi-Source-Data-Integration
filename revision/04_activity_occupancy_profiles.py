@@ -136,8 +136,9 @@ def at_home_by_hour(activity_sequence):
         is_home = loc in HOME_LOCATIONS
         if not is_home and loc in ("", "None", "nan"):
             # Fallback: check activity code prefix
-            code_2 = code[:2] if len(code) >= 2 else ""
-            is_home = code_2 in ("01", "02", "05", "11")
+            code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+            code_2 = code_padded[:2]
+            is_home = code_2 in ("01", "02", "11")
 
         if not is_home:
             continue
@@ -203,6 +204,17 @@ def main():
             n_buildings += 1
 
             for person in persons:
+                # ATUS only surveys persons aged 15+; younger children have
+                # imputed schedules that do not reflect school attendance and
+                # produce spurious midday at-home spikes.  Exclude them.
+                age = 0
+                try:
+                    age = int(float(person.get("AGEP", 0)))
+                except (ValueError, TypeError):
+                    pass
+                if age < 15:
+                    continue
+
                 acts = person.get("activity_sequence", [])
                 if not isinstance(acts, list) or len(acts) == 0:
                     continue

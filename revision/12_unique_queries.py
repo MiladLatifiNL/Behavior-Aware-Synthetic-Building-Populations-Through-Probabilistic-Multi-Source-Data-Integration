@@ -123,11 +123,17 @@ def main():
     # Needs: PUMS (income_quintile, has_seniors) + RECS (energy_burden) + NSRDB (climate_zone)
     q1_total = 0
     q1_high_burden = 0
+    # Comparison groups for Q1
+    q1_all_elderly_total = 0
+    q1_all_elderly_burden = 0
+    q1_q1_hot_total = 0       # All Q1 in hot-humid (any age)
+    q1_q1_hot_burden = 0
+    q1_overall_total = 0
+    q1_overall_burden = 0
 
-    # Q2: WFH vs non-WFH midday occupancy by building type
-    # Needs: PUMS (wfh status) + ATUS (activity schedules) + RECS (building_type)
-    q2_occ = defaultdict(lambda: {"wfh_home": 0, "wfh_total": 0,
-                                   "nowfh_home": 0, "nowfh_total": 0})
+    # Q2: Midday at-home rate by building type
+    # Needs: PUMS (demographics) + ATUS (activity schedules) + RECS (building_type)
+    q2_occ = defaultdict(lambda: {"home": 0, "total": 0})
 
     # Q3: Solar self-consumption hours retired vs dual-earner
     # Needs: ATUS (at-home during solar hours) + NSRDB (solar) + PUMS (demographics)
@@ -166,22 +172,41 @@ def main():
             has_seniors_val = bool(row.get("has_seniors", False))
             btype = str(row.get("building_type_simple", ""))
             energy_burden = row.get("energy_burden", None)
-            wfh = bool(row.get("likely_wfh", False)) or int(row.get("person_work_from_home_count", 0)) > 0
 
             # ---------- Q1: Low-income elderly in hot-humid ----------
-            if income_q == "Q1" and has_seniors_val and "hot" in climate.lower():
-                q1_total += 1
-                if energy_burden is not None:
-                    try:
-                        if float(energy_burden) > 20:
+            is_hot = "hot" in climate.lower()
+            if energy_burden is not None:
+                try:
+                    eb = float(energy_burden)
+                    q1_overall_total += 1
+                    if eb > 20:
+                        q1_overall_burden += 1
+                    if has_seniors_val:
+                        q1_all_elderly_total += 1
+                        if eb > 20:
+                            q1_all_elderly_burden += 1
+                    if income_q == "Q1" and is_hot:
+                        q1_q1_hot_total += 1
+                        if eb > 20:
+                            q1_q1_hot_burden += 1
+                    if income_q == "Q1" and has_seniors_val and is_hot:
+                        q1_total += 1
+                        if eb > 20:
                             q1_high_burden += 1
-                    except (ValueError, TypeError):
-                        pass
+                except (ValueError, TypeError):
+                    pass
 
             # ---------- Q2: WFH midday occupancy ----------
             midday_home_count = 0
             midday_person_count = 0
             for person in persons:
+                # Exclude under-15 (ATUS only surveys 15+)
+                try:
+                    p_age = int(float(person.get("AGEP", 0)))
+                except (ValueError, TypeError):
+                    p_age = 0
+                if p_age < 15:
+                    continue
                 acts = person.get("activity_sequence", [])
                 if not isinstance(acts, list):
                     continue
@@ -192,8 +217,9 @@ def main():
                     code = str(act.get("activity_code", ""))
                     is_home = loc in HOME_LOCATIONS
                     if not is_home and loc in ("", "None", "nan"):
-                        code_2 = code[:2] if len(code) >= 2 else ""
-                        is_home = code_2 in ("01", "02", "05", "11")
+                        code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+                        code_2 = code_padded[:2]
+                        is_home = code_2 in ("01", "02", "11")
                     if not is_home:
                         continue
                     try:
@@ -215,18 +241,19 @@ def main():
                     midday_home_count += 1
 
             if midday_person_count > 0 and btype:
-                key = btype
-                if wfh:
-                    q2_occ[key]["wfh_home"] += midday_home_count
-                    q2_occ[key]["wfh_total"] += midday_person_count
-                else:
-                    q2_occ[key]["nowfh_home"] += midday_home_count
-                    q2_occ[key]["nowfh_total"] += midday_person_count
+                q2_occ[btype]["home"] += midday_home_count
+                q2_occ[btype]["total"] += midday_person_count
 
             # ---------- Q3: Solar self-consumption ----------
             if hh_type in q3_data:
                 solar_home_hours = 0
                 for person in persons:
+                    try:
+                        p_age = int(float(person.get("AGEP", 0)))
+                    except (ValueError, TypeError):
+                        p_age = 0
+                    if p_age < 15:
+                        continue
                     acts = person.get("activity_sequence", [])
                     if not isinstance(acts, list):
                         continue
@@ -235,8 +262,9 @@ def main():
                         code = str(act.get("activity_code", ""))
                         is_home = loc in HOME_LOCATIONS
                         if not is_home and loc in ("", "None", "nan"):
-                            code_2 = code[:2] if len(code) >= 2 else ""
-                            is_home = code_2 in ("01", "02", "05", "11")
+                            code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+                            code_2 = code_padded[:2]
+                            is_home = code_2 in ("01", "02", "11")
                         if not is_home:
                             continue
                         try:
@@ -253,6 +281,7 @@ def main():
                 q3_data[hh_type]["count"] += 1
 
             # ---------- Q4: Thermal discomfort gap ----------
+            # Composite metric: HVAC demand normalized by income
             if income_q:
                 total_hvac = 0.0
                 hvac_count = 0
@@ -272,7 +301,16 @@ def main():
                             except (ValueError, TypeError):
                                 pass
                 if hvac_count > 0:
-                    q4_hvac_by_quintile[income_q].append(total_hvac / hvac_count)
+                    mean_hvac = total_hvac / hvac_count
+                    income_val = 0
+                    try:
+                        income_val = float(row.get("HINCP", 0))
+                    except (ValueError, TypeError):
+                        pass
+                    if income_val > 0:
+                        # Thermal burden = HVAC demand per $10k income
+                        thermal_burden = mean_hvac / (income_val / 10000)
+                        q4_hvac_by_quintile[income_q].append(thermal_burden)
 
             # ---------- Q5: Leisure minutes ----------
             if hh_type in q5_leisure:
@@ -289,6 +327,12 @@ def main():
             total_hvac_load = 0.0
             phantom_hvac_load = 0.0
             for person in persons:
+                try:
+                    p_age = int(float(person.get("AGEP", 0)))
+                except (ValueError, TypeError):
+                    p_age = 0
+                if p_age < 15:
+                    continue
                 acts = person.get("activity_sequence", [])
                 if not isinstance(acts, list):
                     continue
@@ -310,8 +354,9 @@ def main():
                     code = str(act.get("activity_code", ""))
                     is_home = loc in HOME_LOCATIONS
                     if not is_home and loc in ("", "None", "nan"):
-                        code_2 = code[:2] if len(code) >= 2 else ""
-                        is_home = code_2 in ("01", "02", "05", "11")
+                        code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+                        code_2 = code_padded[:2]
+                        is_home = code_2 in ("01", "02", "11")
                     if not is_home:
                         phantom_hvac_load += hvac_val
 
@@ -332,20 +377,23 @@ def main():
 
     # Q1
     q1_pct = (q1_high_burden / q1_total * 100) if q1_total > 0 else 0
+    q1_elderly_pct = (q1_all_elderly_burden / q1_all_elderly_total * 100) if q1_all_elderly_total > 0 else 0
+    q1_q1hot_pct = (q1_q1_hot_burden / q1_q1_hot_total * 100) if q1_q1_hot_total > 0 else 0
+    q1_overall_pct = (q1_overall_burden / q1_overall_total * 100) if q1_overall_total > 0 else 0
     print(f"\nQ1: Low-income elderly in hot-humid with burden >20%")
-    print(f"    {q1_high_burden}/{q1_total} = {q1_pct:.1f}%")
+    print(f"    Target: {q1_high_burden}/{q1_total} = {q1_pct:.1f}%")
+    print(f"    All elderly: {q1_all_elderly_burden}/{q1_all_elderly_total} = {q1_elderly_pct:.1f}%")
+    print(f"    Q1 hot-humid: {q1_q1_hot_burden}/{q1_q1_hot_total} = {q1_q1hot_pct:.1f}%")
+    print(f"    Overall: {q1_overall_burden}/{q1_overall_total} = {q1_overall_pct:.1f}%")
 
     # Q2
-    print(f"\nQ2: WFH vs non-WFH midday at-home rate by building type")
+    print(f"\nQ2: Midday at-home rate by building type")
     q2_results = {}
     for btype in sorted(q2_occ.keys()):
         d = q2_occ[btype]
-        wfh_rate = d["wfh_home"] / d["wfh_total"] * 100 if d["wfh_total"] > 0 else 0
-        nowfh_rate = d["nowfh_home"] / d["nowfh_total"] * 100 if d["nowfh_total"] > 0 else 0
-        diff = wfh_rate - nowfh_rate
-        q2_results[btype] = {"wfh": wfh_rate, "no_wfh": nowfh_rate, "diff": diff}
-        print(f"    {btype}: WFH={wfh_rate:.1f}% vs non-WFH={nowfh_rate:.1f}% "
-              f"(+{diff:.1f}pp)")
+        rate = d["home"] / d["total"] * 100 if d["total"] > 0 else 0
+        q2_results[btype] = rate
+        print(f"    {btype}: {rate:.1f}% (n={d['total']:,})")
 
     # Q3
     print(f"\nQ3: Solar self-consumption hours (home during 9-16)")
@@ -357,13 +405,13 @@ def main():
         print(f"    {hh_type}: {mean_hrs:.1f} hrs/day (n={d['count']:,})")
 
     # Q4
-    print(f"\nQ4: Mean HVAC demand by income quintile")
+    print(f"\nQ4: Thermal burden index by income quintile (HVAC per $10k income)")
     q4_means = {}
     for q in sorted(q4_hvac_by_quintile.keys()):
         vals = q4_hvac_by_quintile[q]
-        mean_val = np.mean(vals) if vals else 0
+        mean_val = np.median(vals) if vals else 0
         q4_means[q] = mean_val
-        print(f"    {q}: mean HVAC = {mean_val:.3f} (n={len(vals):,})")
+        print(f"    {q}: median thermal burden = {mean_val:.3f} (n={len(vals):,})")
 
     # Q5
     print(f"\nQ5: Leisure minutes per person per day")
@@ -395,33 +443,38 @@ def main():
     # ---- Plot ----
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
 
-    # Panel 1: Q1 - Single percentage bar
+    # Panel 1: Q1 - Comparison bars for context
     ax = axes[0, 0]
-    ax.barh(["Low-income elderly\nin hot-humid"], [q1_pct],
-            color="#E74C3C", edgecolor="white", height=0.4)
-    ax.set_xlim(0, 100)
+    q1_labels = ["Low-inc. elderly\nin hot-humid", "All elderly", "Q1 in hot-humid", "Overall"]
+    q1_vals = [q1_pct, q1_elderly_pct, q1_q1hot_pct, q1_overall_pct]
+    q1_colors = ["#E74C3C", "#F39C12", "#3498DB", "#95A5A6"]
+    y_pos = range(len(q1_labels))
+    bars = ax.barh(y_pos, q1_vals, color=q1_colors, edgecolor="white", height=0.55)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(q1_labels, fontsize=9)
+    ax.set_xlim(0, max(q1_vals) * 1.3 if max(q1_vals) > 0 else 100)
     ax.set_xlabel("Households with Burden > 20% (%)")
     ax.set_title("Q1: Energy Poverty in\nVulnerable Elderly (PUMS+RECS+NSRDB)", fontsize=10)
-    ax.text(q1_pct + 2, 0, f"{q1_pct:.1f}%", va="center", fontsize=12, fontweight="bold")
+    for bar, val in zip(bars, q1_vals):
+        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
+                f"{val:.1f}%", ha="left", va="center", fontsize=10, fontweight="bold")
     ax.grid(axis="x", alpha=0.3)
 
-    # Panel 2: Q2 - WFH vs non-WFH grouped bars
+    # Panel 2: Q2 - Midday at-home rate by building type
     ax = axes[0, 1]
-    btypes = [k for k in sorted(q2_results.keys()) if k != "other"][:4]
+    btypes = [k for k in sorted(q2_results.keys()) if k != "other"][:5]
     if not btypes:
-        btypes = list(q2_results.keys())[:4]
+        btypes = list(q2_results.keys())[:5]
     x = np.arange(len(btypes))
-    w = 0.35
-    wfh_vals = [q2_results[b]["wfh"] for b in btypes]
-    nowfh_vals = [q2_results[b]["no_wfh"] for b in btypes]
-    ax.bar(x - w/2, wfh_vals, w, label="WFH", color="#3498DB", edgecolor="white")
-    ax.bar(x + w/2, nowfh_vals, w, label="Non-WFH", color="#E74C3C", edgecolor="white")
+    vals_q2 = [q2_results[b] for b in btypes]
+    ax.bar(x, vals_q2, color="#3498DB", edgecolor="white", width=0.6)
     ax.set_xticks(x)
     labels = [b.replace("_", "\n") for b in btypes]
     ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("Midday At-Home Rate (%)")
-    ax.set_title("Q2: WFH Impact on\nMidday Occupancy (PUMS+ATUS+RECS)", fontsize=10)
-    ax.legend(fontsize=9)
+    ax.set_title("Q2: Midday Occupancy by\nBuilding Type (PUMS+ATUS+RECS)", fontsize=10)
+    for i, val in enumerate(vals_q2):
+        ax.text(i, val + 1, f"{val:.0f}%", ha="center", fontsize=9, fontweight="bold")
     ax.grid(axis="y", alpha=0.3)
 
     # Panel 3: Q3 - Solar self-consumption
@@ -438,15 +491,18 @@ def main():
     ax.set_xticklabels([t.replace(" + ", "\n+ ") for t in types_q3], fontsize=9)
     ax.grid(axis="y", alpha=0.3)
 
-    # Panel 4: Q4 - HVAC demand by income quintile
+    # Panel 4: Q4 - Thermal burden index by income quintile
     ax = axes[1, 0]
     quintiles = sorted(q4_means.keys())
     hvac_vals = [q4_means[q] for q in quintiles]
     colors_q4 = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(quintiles)))
-    ax.bar(quintiles, hvac_vals, color=colors_q4, edgecolor="white", width=0.6)
+    bars = ax.bar(quintiles, hvac_vals, color=colors_q4, edgecolor="white", width=0.6)
     ax.set_xlabel("Income Quintile")
-    ax.set_ylabel("Mean HVAC Demand Indicator")
+    ax.set_ylabel("Thermal Burden Index\n(HVAC per $10k Income)")
     ax.set_title("Q4: Thermal Discomfort Gap\n(All Four Datasets)", fontsize=10)
+    for bar, val in zip(bars, hvac_vals):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01 * max(hvac_vals),
+                f"{val:.2f}", ha="center", fontsize=9)
     ax.grid(axis="y", alpha=0.3)
 
     # Panel 5: Q5 - Leisure comparison
@@ -494,10 +550,10 @@ def main():
     print("\n" + "=" * 60)
     print("LATEX TABLE CONTENT:")
     print("=" * 60)
-    wfh_diffs = [q2_results[b]["diff"] for b in q2_results if q2_results[b].get("diff", 0) != 0]
-    overall_wfh_diff = np.mean(wfh_diffs) if wfh_diffs else 0
+    q2_vals_all = [q2_results[b] for b in q2_results]
+    q2_range = f"{min(q2_vals_all):.0f}--{max(q2_vals_all):.0f}" if q2_vals_all else "N/A"
     print(f"Q1: {q1_pct:.1f}\\%")
-    print(f"Q2: +{overall_wfh_diff:.0f} pp higher")
+    print(f"Q2: Midday at-home rate {q2_range}\\%")
     q3_retired = q3_results.get("Retired couple", 0)
     q3_dual = q3_results.get("Dual-earner + children", 0)
     print(f"Q3: {q3_retired:.1f} vs {q3_dual:.1f} hrs")

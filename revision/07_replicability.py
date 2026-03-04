@@ -279,7 +279,7 @@ ax.set_xlabel("Pearson $r$ (building age vs. energy intensity)", fontsize=12)
 ax.set_title("(a)  Correlation by Climate Zone", fontsize=13, fontweight="bold")
 
 # Reference line for overall r
-ax.axvline(overall_r, color="crimson", linestyle="--", linewidth=1.2, label=f"Overall $r$ = {overall_r:.3f}")
+ax.axvline(overall_r, color="crimson", linestyle="--", linewidth=1.2, label=f"Overall $r$ = {overall_r:.2f}")
 ax.legend(fontsize=10, loc="lower right", frameon=False)
 
 # Annotate bar values

@@ -220,9 +220,16 @@ def main():
                     hvac = weather.get("hvac_load", None)
                     exposure = str(weather.get("exposure_type", ""))
                     location = str(act.get("location", ""))
+                    code = str(act.get("activity_code", ""))
+                    code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+                    code_2 = code_padded[:2]
 
+                    # Outdoor = genuinely temperature-exposed activities
+                    # Sports/recreation (13), travel (18), or explicit outdoor exposure
+                    is_outdoor_activity = code_2 in ("13", "18")
                     is_outdoor = (exposure == "outdoor" or
-                                  (location not in HOME_LOCATIONS and
+                                  (is_outdoor_activity and
+                                   location not in HOME_LOCATIONS and
                                    location not in ("", "None", "nan")))
 
                     # Panel A: outdoor minutes by temperature bin
@@ -337,8 +344,13 @@ def main():
                         continue
                     exposure = str(weather.get("exposure_type", ""))
                     location = str(act.get("location", ""))
+                    code = str(act.get("activity_code", ""))
+                    code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+                    code_2 = code_padded[:2]
+                    is_outdoor_activity = code_2 in ("13", "18")
                     is_outdoor = (exposure == "outdoor" or
-                                  (location not in HOME_LOCATIONS and
+                                  (is_outdoor_activity and
+                                   location not in HOME_LOCATIONS and
                                    location not in ("", "None", "nan")))
                     if is_outdoor:
                         person_outdoor += duration
@@ -410,8 +422,8 @@ def main():
     ax.text(30.5, ax.get_ylim()[1] * 0.9 if ax.get_ylim()[1] > 0 else 1,
             "30°C", ha="center", fontsize=9, color="gray")
     ax.set_xlabel("Outdoor Temperature (°C)")
-    ax.set_ylabel("Mean Outdoor Activity (min/person)")
-    ax.set_title("(a) Outdoor Duration vs. Temperature")
+    ax.set_ylabel("Recreation + Travel (min/person)")
+    ax.set_title("(a) Outdoor Activity Duration vs. Temperature")
     ax.grid(axis="y", alpha=0.3)
 
     # Panel B: HVAC demand by household type and hour
@@ -440,8 +452,8 @@ def main():
                   linewidth=0.8, width=0.7)
     ax.set_xticks(range(5))
     ax.set_xticklabels(quintile_labels, fontsize=9)
-    ax.set_ylabel("Time Spent Outdoors (%)")
-    ax.set_title("(c) Outdoor Time by Temperature Quintile")
+    ax.set_ylabel("Outdoor Activity Time (%)")
+    ax.set_title("(c) Outdoor Activity by Temperature Quintile")
     ax.grid(axis="y", alpha=0.3)
     for bar, val in zip(bars, outdoor_fraction):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,

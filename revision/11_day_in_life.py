@@ -58,18 +58,18 @@ PREFIX_TO_CATEGORY = {
     "03": "Household",       # Caring for household members
     "04": "Household",       # Caring for non-household members
     "05": "Work",
-    "06": "Other",           # Education
-    "07": "Other",           # Consumer purchases
-    "08": "Other",           # Professional services
+    "06": "Work",            # Education → grouped with Work
+    "07": "Household",       # Consumer purchases / shopping
+    "08": "Household",       # Professional services
     "09": "Household",       # Household services
-    "10": "Other",           # Civic obligations
+    "10": "Leisure",         # Civic obligations
     "11": "Eating",
     "12": "Leisure",         # Socializing, relaxing
     "13": "Leisure",         # Sports, exercise
-    "14": "Other",           # Religious
-    "15": "Other",           # Volunteer
-    "16": "Other",           # Telephone calls
-    "17": "Other",
+    "14": "Leisure",         # Religious activities
+    "15": "Leisure",         # Volunteer activities
+    "16": "Leisure",         # Telephone calls
+    "17": "Leisure",         # Other socializing
     "18": "Travel",
     "19": "Other",
     "50": "Other",
@@ -124,10 +124,13 @@ DESIRED_HOUSEHOLDS = [
         "criteria": lambda r: (
             int(r.get("household_size", r.get("NP", 1))) == 2 and
             bool(r.get("has_seniors", False)) and
-            float(r.get("employment_rate", 0.0)) == 0
+            float(r.get("employment_rate", 0.0)) == 0 and
+            str(r.get("climate_zone", "")).lower().replace(" ", "_") in
+            ("very_cold", "cold") and
+            str(r.get("STATE", "")) != "02"  # Exclude Alaska (no weather data)
         ),
         "preferred_climate": "very_cold",
-        "shard_hint": list(range(250, 350)),  # Northern states
+        "shard_hint": list(range(340, 420)),  # Maine(23)~shard350, Michigan(26)~shard400
     },
     {
         "label": "C",
@@ -160,7 +163,12 @@ DESIRED_HOUSEHOLDS = [
 # ---------------------------------------------------------------------------
 def code_to_category(code):
     """Map ATUS activity code to display category."""
-    code_str = str(code).zfill(6)
+    code_str = str(code).strip()
+    # ATUS codes can be 3-4 digits (XXYY) or 5-6 digits (XXYYYY)
+    if len(code_str) <= 4:
+        code_str = code_str.zfill(4)
+    else:
+        code_str = code_str.zfill(6)
     prefix = code_str[:2]
     return PREFIX_TO_CATEGORY.get(prefix, "Other")
 
@@ -213,6 +221,12 @@ def find_households():
                     continue
 
                 if spec["criteria"](row):
+                    # Verify weather data exists for this household
+                    first_acts = persons[0].get("activity_sequence", [])
+                    if isinstance(first_acts, list) and len(first_acts) > 0:
+                        w = first_acts[0].get("weather")
+                        if not isinstance(w, dict) or w.get("temp_mean") is None:
+                            continue  # Skip households without weather data
                     found[idx] = row.to_dict()
                     print(f"  Found HH {spec['label']} ({spec['name']}): "
                           f"STATE={row.get('STATE', '?')}, "
@@ -333,6 +347,29 @@ def main():
 
     n_hh = len(found)
 
+    # Debug: print activity code distribution for each found household
+    for idx in sorted(found.keys()):
+        spec = DESIRED_HOUSEHOLDS[idx]
+        row_data = found[idx]
+        persons = row_data.get("persons", [])
+        if not isinstance(persons, list):
+            continue
+        cat_counts = {}
+        for person in persons:
+            acts = person.get("activity_sequence", [])
+            if not isinstance(acts, list):
+                continue
+            for act in acts:
+                code = str(act.get("activity_code", ""))
+                cat = code_to_category(code)
+                dur = 0
+                try:
+                    dur = int(act.get("duration_minutes", 0))
+                except (ValueError, TypeError):
+                    pass
+                cat_counts[cat] = cat_counts.get(cat, 0) + dur
+        print(f"  HH {spec['label']} activity minutes: {cat_counts}")
+
     # Determine figure height based on number of households and persons
     total_rows = 0
     hh_data = []
@@ -433,8 +470,9 @@ def main():
 
         # Title with household info
         income_k = hd["income"] / 1000
+        person_word = "person" if n_persons == 1 else "persons"
         title = (f"Household {spec['label']}: {spec['name']} "
-                 f"({n_persons} persons, {hd['climate']}, "
+                 f"({n_persons} {person_word}, {hd['climate']}, "
                  f"{hd['state_name']}, ${income_k:.0f}k)")
         ax_act.set_title(title, fontsize=11, fontweight="bold", loc="left")
         ax_act.axvspan(8, 17, alpha=0.04, color="gray")
@@ -445,8 +483,9 @@ def main():
         temp = hd["hourly_temp"]
         ax_temp.plot(temp, hours, color="#E74C3C", lw=1.8)
         ax_temp.fill_betweenx(hours, temp, alpha=0.15, color="#E74C3C")
-        ax_temp.set_ylim(-0.5, n_persons - 0.2)
-        ax_temp.set_yticks([])
+        ax_temp.set_ylim(-0.5, 23.5)
+        ax_temp.set_yticks([0, 6, 12, 18])
+        ax_temp.set_yticklabels(["00", "06", "12", "18"], fontsize=8)
         ax_temp.invert_yaxis()
         if row_idx == 0:
             ax_temp.set_title("T (°C)", fontsize=10)

@@ -152,17 +152,17 @@ for df in iterate_shards():
                 cz_num10[zone] += int((vals > 10).sum())
                 cz_num20[zone] += int((vals > 20).sum())
 
-        # --- C: mean burden by heating fuel -------------------------
+        # --- C: mean burden by heating fuel (cap at 100%) -----------
         if hf is not None:
             for fuel, grp in df.loc[valid].groupby(hf):
-                vals = grp["energy_burden"]
+                vals = grp["energy_burden"].clip(upper=100)
                 hf_sum[fuel] += float(vals.sum())
                 hf_cnt[fuel] += len(vals)
 
-        # --- C: mean burden by tenure type --------------------------
+        # --- C: mean burden by tenure type (cap at 100%) ----------
         if tt is not None:
             for ttype, grp in df.loc[valid].groupby(tt):
-                vals = grp["energy_burden"]
+                vals = grp["energy_burden"].clip(upper=100)
                 tt_sum[ttype] += float(vals.sum())
                 tt_cnt[ttype] += len(vals)
 
@@ -301,7 +301,7 @@ ax.set_ylabel("Share of Households (%)", fontsize=12)
 ax.set_title("Energy Poverty Rate by Climate Zone", fontsize=14, fontweight="bold")
 ax.set_xticks(x)
 ax.set_xticklabels(zone_labels, fontsize=12)
-ax.legend(fontsize=11, frameon=False)
+ax.legend(fontsize=11, frameon=False, loc="upper right")
 ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.0f"))
 
 for bar_set in [bars1, bars2]:

@@ -131,8 +131,9 @@ def at_home_by_hour(activity_sequence):
         code = str(act.get("activity_code", ""))
         is_home = loc in HOME_LOCATIONS
         if not is_home and loc in ("", "None", "nan"):
-            code_2 = code[:2] if len(code) >= 2 else ""
-            is_home = code_2 in ("01", "02", "05", "11")
+            code_padded = code.zfill(4) if len(code) <= 4 else code.zfill(6)
+            code_2 = code_padded[:2]
+            is_home = code_2 in ("01", "02", "11")
         if not is_home:
             continue
 
@@ -195,8 +196,17 @@ def main():
             n_persons += len(persons)
 
             # Compute household-level occupancy: sum of per-person at-home
+            # Exclude persons under 15 (ATUS only surveys 15+; younger
+            # children have imputed schedules that don't reflect school)
             hh_occ = np.zeros(24)  # persons at home per hour
             for person in persons:
+                age = 0
+                try:
+                    age = int(float(person.get("AGEP", 0)))
+                except (ValueError, TypeError):
+                    pass
+                if age < 15:
+                    continue
                 acts = person.get("activity_sequence", [])
                 if not isinstance(acts, list):
                     continue
@@ -242,18 +252,15 @@ def main():
             type_mean_occ[t] = np.zeros(24)
             type_peak_to_avg[t] = 1.0
 
-    # Hypothetical uniform: every building follows the overall average profile
-    overall_mean_profile = agg_occ / n_buildings if n_buildings > 0 else np.zeros(24)
-    # If all buildings had this same profile, the aggregate peak would be
-    # n_buildings * max(overall_mean_profile) = max(agg_occ) [same peak]
-    # But the sum_of_individual_peaks under uniform = n_buildings * max(overall_mean)
-    # Coincidence factor for uniform = 1.0 (by construction)
-
-    # Normalize both for plotting
+    # Normalize actual profile for plotting
     agg_normalized = agg_occ / peak_aggregate if peak_aggregate > 0 else agg_occ
-    # For uniform: shape is the same but with sharper shoulders
-    # Use the overall mean profile, normalized to same total but with peak = 1
-    uniform_profile = overall_mean_profile / overall_mean_profile.max() if overall_mean_profile.max() > 0 else overall_mean_profile
+
+    # Hypothetical uniform: if all buildings had constant (flat) occupancy
+    # throughout the day, the aggregate would be a flat line at the mean level.
+    # The diversity benefit is the difference between this flat line and the
+    # actual shaped profile — diversity creates valleys (people away at different times).
+    uniform_level = agg_normalized.mean()  # Mean of normalized profile
+    uniform_profile = np.full(24, uniform_level)
 
     # Peak reduction percentage
     peak_reduction_pct = (1 - coincidence_factor) * 100
@@ -280,8 +287,11 @@ def main():
     ax.plot(hours, uniform_profile, color="#E74C3C", lw=2.0, ls="--",
             label="Hypothetical (uniform)", zorder=2)
     ax.fill_between(hours, agg_normalized, uniform_profile,
-                    where=uniform_profile > agg_normalized,
-                    color="#E74C3C", alpha=0.15, label="Diversity benefit")
+                    where=agg_normalized < uniform_profile,
+                    color="#27AE60", alpha=0.15, label="Diversity benefit (below flat)")
+    ax.fill_between(hours, agg_normalized, uniform_profile,
+                    where=agg_normalized > uniform_profile,
+                    color="#E74C3C", alpha=0.15, label="Peak above flat")
     ax.axvspan(8, 17, alpha=0.06, color="gray")
     ax.set_xlabel("Hour of Day")
     ax.set_ylabel("Normalized Aggregate Occupancy")
