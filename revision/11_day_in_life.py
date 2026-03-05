@@ -54,25 +54,25 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # Activity code prefix → category
 PREFIX_TO_CATEGORY = {
     "01": "Sleep/Pers. Care",
-    "02": "Household",
+    "02": "Household",       # Household activities (cooking, cleaning)
     "03": "Household",       # Caring for household members
     "04": "Household",       # Caring for non-household members
     "05": "Work",
-    "06": "Work",            # Education → grouped with Work
-    "07": "Household",       # Consumer purchases / shopping
-    "08": "Household",       # Professional services
+    "06": "Other",           # Education
+    "07": "Other",           # Consumer purchases
+    "08": "Other",           # Professional services
     "09": "Household",       # Household services
-    "10": "Leisure",         # Civic obligations
+    "10": "Other",           # Civic obligations (rare)
     "11": "Eating",
     "12": "Leisure",         # Socializing, relaxing
-    "13": "Leisure",         # Sports, exercise
-    "14": "Leisure",         # Religious activities
-    "15": "Leisure",         # Volunteer activities
-    "16": "Leisure",         # Telephone calls
-    "17": "Leisure",         # Other socializing
+    "13": "Leisure",         # Sports, exercise, recreation
+    "14": "Other",           # Religious
+    "15": "Other",           # Volunteer
+    "16": "Other",           # Telephone calls
+    "17": "Other",           # (secondary codes)
     "18": "Travel",
-    "19": "Other",
-    "50": "Other",
+    "19": "Other",           # Misc
+    "50": "Other",           # Data codes (not actual activities)
 }
 
 ACTIVITY_COLORS = {
@@ -401,10 +401,10 @@ def main():
         })
         total_rows += len(persons)
 
-    fig_height = max(8, 2.2 * total_rows + 1.5)
+    fig_height = max(8, 2.2 * total_rows + 0.5)
     fig, axes = plt.subplots(n_hh, 2, figsize=(16, fig_height),
                              gridspec_kw={"width_ratios": [4, 1],
-                                          "hspace": 0.35, "wspace": 0.08})
+                                          "hspace": 0.25, "wspace": 0.08})
     if n_hh == 1:
         axes = axes.reshape(1, -1)
 
@@ -505,13 +505,14 @@ def main():
                      transform=ax_temp.transAxes, ha="right", va="bottom",
                      fontsize=9, color="#3498DB")
 
-    # Legend at bottom
+    # Legend at bottom — anchored to last activity axes for tight placement
     legend_patches = [mpatches.Patch(color=ACTIVITY_COLORS[cat], label=cat)
                       for cat in ACTIVITY_COLORS]
-    fig.legend(handles=legend_patches, loc="lower center",
-               ncol=len(ACTIVITY_COLORS), fontsize=10,
-               frameon=True, framealpha=0.9,
-               bbox_to_anchor=(0.45, -0.02))
+    ax_last = axes[-1, 0]
+    ax_last.legend(handles=legend_patches, loc="upper center",
+                   ncol=len(ACTIVITY_COLORS), fontsize=10,
+                   frameon=True, framealpha=0.9, edgecolor="none",
+                   bbox_to_anchor=(0.55, -0.18))
 
     out_path = FIG_DIR / "fig_day_in_life.pdf"
     fig.savefig(out_path, bbox_inches="tight")

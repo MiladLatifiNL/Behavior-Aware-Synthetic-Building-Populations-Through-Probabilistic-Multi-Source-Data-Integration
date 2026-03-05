@@ -278,9 +278,12 @@ ax.set_yticklabels(zone_labels_a, fontsize=11)
 ax.set_xlabel("Pearson $r$ (building age vs. energy intensity)", fontsize=12)
 ax.set_title("(a)  Correlation by Climate Zone", fontsize=13, fontweight="bold")
 
-# Reference line for overall r
-ax.axvline(overall_r, color="crimson", linestyle="--", linewidth=1.2, label=f"Overall $r$ = {overall_r:.2f}")
-ax.legend(fontsize=10, loc="lower right", frameon=False)
+# Reference line for overall r (zorder=5 to render in front of bars)
+ax.axvline(overall_r, color="crimson", linestyle="--", linewidth=1.2, zorder=5)
+# Direct text annotation at the top of the dashed line (no legend box)
+ax.text(overall_r + 0.005, len(r_values) - 0.3,
+        f"Overall $r$ = {overall_r:.2f}", color="crimson",
+        fontsize=10, fontweight="bold", va="top", ha="left")
 
 # Annotate bar values
 for i, v in enumerate(r_values):
@@ -304,10 +307,12 @@ ax.set_xlabel("Gini Coefficient (energy burden)", fontsize=12)
 ax.set_title("(b)  Energy-Burden Gini by State (Top 20)", fontsize=13, fontweight="bold")
 ax.invert_yaxis()
 
-# Reference line for mean Gini
-ax.axvline(mean_gini, color="navy", linestyle="--", linewidth=1.2,
-           label=f"National mean = {mean_gini:.3f}")
-ax.legend(fontsize=10, loc="lower right", frameon=False)
+# Reference line for mean Gini (zorder=5 to render in front of bars)
+ax.axvline(mean_gini, color="navy", linestyle="--", linewidth=1.2, zorder=5)
+# Direct text annotation at the bottom of the chart (below bars, y inverted)
+ax.text(mean_gini + 0.005, -0.8,
+        f"National mean = {mean_gini:.3f}", color="navy",
+        fontsize=10, fontweight="bold", va="bottom", ha="left")
 
 for i, v in enumerate(gini_vals):
     ax.text(v + 0.003, i, f"{v:.3f}", va="center", fontsize=9)

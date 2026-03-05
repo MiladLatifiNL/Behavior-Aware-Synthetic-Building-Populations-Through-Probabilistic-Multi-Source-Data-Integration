@@ -486,7 +486,7 @@ def main():
     for bar, val in zip(bars, vals_q3):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2,
                 f"{val:.1f}h", ha="center", va="bottom", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Solar-Concurrent At-Home Hours")
+    ax.set_ylabel("Solar-Concurrent At-Home\nPerson-Hours")
     ax.set_title("Q3: Solar Self-Consumption\nPotential (ATUS+NSRDB+PUMS)", fontsize=10)
     ax.set_xticklabels([t.replace(" + ", "\n+ ") for t in types_q3], fontsize=9)
     ax.grid(axis="y", alpha=0.3)

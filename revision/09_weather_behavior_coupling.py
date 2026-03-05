@@ -242,15 +242,29 @@ def main():
                             pass
 
                     # Panel B: HVAC load by hour and household type
+                    # Distribute across all hours the activity spans
+                    # (not just the start hour) to avoid start-time artifacts
                     if hvac is not None:
                         try:
                             hvac_val = float(hvac)
                             start_str = str(act.get("start_time", "00:00:00"))
+                            stop_str = str(act.get("stop_time", start_str))
                             sp = start_str.split(":")
-                            start_hour = int(sp[0])
-                            if 0 <= start_hour < 24:
-                                hvac_load_sum[hh_type][start_hour] += hvac_val * duration
-                                hvac_load_count[hh_type][start_hour] += duration
+                            ep = stop_str.split(":")
+                            start_min = int(sp[0]) * 60 + int(sp[1])
+                            stop_min = int(ep[0]) * 60 + int(ep[1])
+                            if stop_min <= start_min:
+                                stop_min += 1440  # crosses midnight
+                            # Distribute by computing overlap with each hour
+                            first_h = start_min // 60
+                            last_h = min((stop_min - 1) // 60, 23)
+                            for h in range(first_h, last_h + 1):
+                                h_start = h * 60
+                                h_end = (h + 1) * 60
+                                overlap = min(h_end, stop_min) - max(h_start, start_min)
+                                if overlap > 0 and 0 <= h < 24:
+                                    hvac_load_sum[hh_type][h] += hvac_val * overlap
+                                    hvac_load_count[hh_type][h] += overlap
                         except (ValueError, TypeError, IndexError):
                             pass
 
@@ -379,12 +393,13 @@ def main():
                 se_outdoor[i] = np.sqrt(max(0, var) / n)
 
     # Panel B: mean HVAC load per hour by household type
+    # Rescale from raw index (2*ΔT) to °C deviation from 18°C setpoint
     hvac_mean = {}
     for t in HH_TYPES_ORDERED:
         hvac_mean[t] = np.zeros(24)
         for h in range(24):
             if hvac_load_count[t][h] > 0:
-                hvac_mean[t][h] = hvac_load_sum[t][h] / hvac_load_count[t][h]
+                hvac_mean[t][h] = (hvac_load_sum[t][h] / hvac_load_count[t][h]) / 2.0
 
     # Panel C: outdoor fraction by quintile
     outdoor_fraction = np.zeros(5)
@@ -406,14 +421,26 @@ def main():
     # ---- Plot ----
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
 
-    # Panel A: Outdoor duration vs temperature
+    # Panel A: Outdoor duration vs temperature (smoothed with 3-bin rolling mean)
     ax = axes[0]
     valid = person_count_per_bin > 0
-    ax.plot(np.array(TEMP_BIN_CENTERS)[valid], mean_outdoor[valid],
+    centers_valid = np.array(TEMP_BIN_CENTERS)[valid]
+    outdoor_valid = mean_outdoor[valid]
+    se_valid = se_outdoor[valid]
+    # Apply 3-bin rolling average to reduce noise from sparse bins
+    if len(outdoor_valid) >= 3:
+        kernel = np.ones(3) / 3
+        outdoor_smooth = np.convolve(outdoor_valid, kernel, mode="same")
+        # Keep first and last points unsmoothed
+        outdoor_smooth[0] = outdoor_valid[0]
+        outdoor_smooth[-1] = outdoor_valid[-1]
+    else:
+        outdoor_smooth = outdoor_valid
+    ax.plot(centers_valid, outdoor_smooth,
             color="#2C6FAC", lw=2.2, marker="o", markersize=5, zorder=3)
-    ax.fill_between(np.array(TEMP_BIN_CENTERS)[valid],
-                    (mean_outdoor - se_outdoor)[valid],
-                    (mean_outdoor + se_outdoor)[valid],
+    ax.fill_between(centers_valid,
+                    outdoor_smooth - se_valid,
+                    outdoor_smooth + se_valid,
                     color="#2C6FAC", alpha=0.2, zorder=2)
     ax.axvline(0, color="gray", ls="--", lw=0.8, alpha=0.6)
     ax.axvline(30, color="gray", ls="--", lw=0.8, alpha=0.6)
@@ -426,19 +453,25 @@ def main():
     ax.set_title("(a) Outdoor Activity Duration vs. Temperature")
     ax.grid(axis="y", alpha=0.3)
 
-    # Panel B: HVAC demand by household type and hour
+    # Panel B: HVAC demand by household type and hour (smoothed with 3-hour window)
     ax = axes[1]
     hours = np.arange(24)
     for hh_type in HH_TYPES_ORDERED:
         style = STYLE_MAP[hh_type]
-        ax.plot(hours, hvac_mean[hh_type],
+        raw = hvac_mean[hh_type]
+        # Circular 3-hour rolling average to smooth hourly noise
+        smoothed = np.zeros(24)
+        for h in range(24):
+            vals = [raw[(h - 1) % 24], raw[h], raw[(h + 1) % 24]]
+            smoothed[h] = np.mean(vals)
+        ax.plot(hours, smoothed,
                 color=style["color"], ls=style["ls"], lw=style["lw"],
                 label=hh_type)
     ax.axvspan(8, 17, alpha=0.08, color="gray", label="_nolegend_")
     ax.text(12.5, ax.get_ylim()[1] * 0.95 if ax.get_ylim()[1] > 0 else 0.5,
             "Work hours", ha="center", fontsize=9, color="gray", fontstyle="italic")
     ax.set_xlabel("Hour of Day")
-    ax.set_ylabel("Mean HVAC Demand Indicator")
+    ax.set_ylabel("Heating Demand (°C below setpoint)")
     ax.set_title("(b) HVAC Demand by Household Type")
     ax.set_xticks([0, 4, 8, 12, 16, 20])
     ax.set_xticklabels(["00", "04", "08", "12", "16", "20"])
