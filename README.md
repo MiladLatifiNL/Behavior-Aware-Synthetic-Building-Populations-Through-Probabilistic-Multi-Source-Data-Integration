@@ -11,6 +11,14 @@ A data integration pipeline that constructs synthetic building populations for e
 | **ATUS** 2023 (American Time Use Survey) | 24-hour activity diaries with demographic profiles | 8,548 respondents; 153,120 activity records |
 | **NSRDB** (National Solar Radiation Database) | Hourly weather: temperature, humidity, solar radiation, wind | State-level hourly time series |
 
+## Final Data Set
+
+The zip format of the dataset (9 GB) is available on Zenodo:
+
+https://zenodo.org/records/18877737
+
+DOI: https://doi.org/10.5281/zenodo.18877736
+
 ## Pipeline Architecture
 
 ```text
