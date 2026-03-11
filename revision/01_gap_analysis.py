@@ -46,13 +46,13 @@ capabilities = [
     "Energy consumption\n(kWh, cost, end-use)",
     "Minute-level activities\n(time-use diaries)",
     "Hourly weather\n(temp, solar, wind)",
+    "Population scale\n(>1M buildings)",
     "Household coordination\n(childcare, meals, sleep)",
     "Income-stratified\nenergy burden",
     "Activity-aware\noccupancy profiles",
     "Weather-behavior\ninteraction",
     "Cross-domain\ncouplings analysis",
     "EV adoption by\ndemographic profile",
-    "Population scale\n(>1M buildings)",
 ]
 
 sources = ["PUMS", "RECS", "ATUS", "NSRDB", "Unified"]
@@ -65,13 +65,13 @@ matrix = np.array([
     [ 0.0,  1.0,  0.0,  0.0,   1.0],  # Energy consumption
     [ 0.0,  0.0,  1.0,  0.0,   1.0],  # Minute-level activities
     [ 0.0,  0.0,  0.0,  1.0,   1.0],  # Hourly weather
+    [ 1.0,  0.0,  0.0,  0.0,   1.0],  # Population scale (NSRDB has weather, not buildings)
     [ 0.0,  0.0,  0.0,  0.0,   1.0],  # Household coordination
     [ 0.0,  0.5,  0.0,  0.0,   1.0],  # Income-stratified energy burden
     [ 0.0,  0.0,  0.5,  0.0,   1.0],  # Activity-aware occupancy
     [ 0.0,  0.0,  0.0,  0.0,   1.0],  # Weather-behavior interaction
     [ 0.0,  0.0,  0.0,  0.0,   1.0],  # Cross-domain couplings
     [ 0.5,  0.0,  0.0,  0.0,   1.0],  # EV adoption
-    [ 1.0,  0.0,  0.0,  1.0,   1.0],  # Population scale
 ])
 # fmt: on
 
@@ -108,8 +108,8 @@ sep_x = len(sources) - 1.5
 ax.axvline(x=sep_x, color="black", linewidth=2.0, linestyle="-")
 
 # Horizontal dashed line separating source-available from integration-only
-# capabilities (between row 4 "Hourly weather" and row 5 "Household coordination")
-ax.axhline(y=4.5, color="black", linewidth=1.2, linestyle="--")
+# capabilities (between row 5 "Population scale" and row 6 "Household coordination")
+ax.axhline(y=5.5, color="black", linewidth=1.2, linestyle="--")
 
 # Highlight the Unified column with a subtle border
 for i in range(matrix.shape[0]):
